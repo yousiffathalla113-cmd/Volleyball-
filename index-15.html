@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Volley Rally</title>
+<style>
+:root{--ink:#12233c;--blue:#3b82f6;--orange:#ff9f43;--cream:#f5f7ff}
+*{box-sizing:border-box;touch-action:manipulation}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101a2e;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:white}
+#wrap{height:100dvh;width:100vw;display:flex;align-items:center;justify-content:center;background:linear-gradient(#172742,#0d1424)}
+#game{position:relative;width:min(100vw,177.78dvh);height:min(100dvh,56.25vw);overflow:hidden;background:#8bd7ff;border-radius:0;box-shadow:0 0 40px #0008}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;inset:0;pointer-events:none}
+.score{position:absolute;top:3.5%;width:25%;text-align:center;font-size:clamp(16px,3.2vw,32px);font-weight:900;text-shadow:0 3px 0 #16274655}
+#leftScore{left:7%}#rightScore{right:7%}
+.name{font-size:clamp(9px,1.3vw,14px);letter-spacing:.13em;opacity:.9;display:block}
+#centerTop{position:absolute;top:4%;left:50%;transform:translateX(-50%);font-size:clamp(10px,1.4vw,15px);font-weight:800;letter-spacing:.12em;color:#173353}
+#message{position:absolute;top:22%;left:50%;transform:translateX(-50%);text-align:center;color:#12233c;font-weight:900;font-size:clamp(18px,3.5vw,38px);text-shadow:0 2px #fff7;white-space:nowrap}
+#message small{display:block;font-size:.38em;letter-spacing:.12em}
+#menu{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#15233cdd,#203d5bdd);pointer-events:auto}
+.panel{width:min(84%,440px);padding:clamp(18px,4vw,34px);border:2px solid #ffffff40;border-radius:24px;background:#f5f7fff2;color:#12233c;text-align:center;box-shadow:0 18px 50px #0005}
+.logo{font-weight:1000;letter-spacing:-.06em;font-size:clamp(34px,7vw,58px);line-height:.95}
+.logo span{color:#f28b31}
+.sub{margin:14px 0 20px;color:#4b5e7c;font-weight:650;font-size:clamp(12px,2vw,15px)}
+button{border:0;border-radius:14px;font:900 15px system-ui;cursor:pointer}
+.primary{background:#ff9f43;color:#17243a;padding:15px 24px;width:100%;box-shadow:0 5px 0 #d97720}
+.secondary{background:#e2eafa;color:#203653;padding:11px 16px}
+.options{display:flex;gap:9px;margin:12px 0}
+.options button{flex:1}
+.help{font-size:12px;line-height:1.55;color:#52627a;margin-top:18px}
+#controls{position:absolute;bottom:4%;left:0;right:0;display:none;justify-content:space-between;align-items:flex-end;padding:0 4%;pointer-events:none}
+.cluster{display:flex;gap:9px;pointer-events:auto}
+.ctrl{width:clamp(48px,8vw,76px);height:clamp(48px,8vw,76px);border-radius:50%;background:#f5f7ffdd;color:#17304f;border:2px solid #fff;box-shadow:0 4px 0 #14294555;font-size:clamp(11px,1.8vw,16px);font-weight:1000;user-select:none;-webkit-user-select:none}
+.ctrl.action{background:#ff9f43eF;color:#17243a}
+#pause{position:absolute;right:3%;bottom:4%;pointer-events:auto;width:38px;height:38px;border-radius:12px;background:#ffffffbb;color:#17304f;font-weight:900}
+#rotate{display:none;position:absolute;inset:0;background:#101a2e;color:white;align-items:center;justify-content:center;text-align:center;padding:30px}
+@media (orientation:portrait) and (max-width:700px){#game{width:100vw;height:56.25vw;transform:rotate(90deg);flex:none}#wrap{overflow:hidden}#rotate{display:none}}
+</style>
+</head>
+<body>
+<div id="wrap">
+ <div id="game">
+  <canvas id="c" width="960" height="540"></canvas>
+  <div id="hud">
+   <div id="leftScore" class="score">0<span class="name">YOU</span></div>
+   <div id="rightScore" class="score">0<span class="name">RIVAL</span></div>
+   <div id="centerTop">VOLLEY RALLY · FIRST TO 15</div>
+   <div id="message"></div>
+   <button id="pause">Ⅱ</button>
+   <div id="controls">
+    <div class="cluster"><button class="ctrl" data-key="left">◀</button><button class="ctrl" data-key="right">▶</button></div>
+    <div class="cluster"><button class="ctrl action" data-key="jump">JUMP</button><button class="ctrl action" data-key="hit">HIT</button></div>
+   </div>
+   <div id="menu">
+    <div class="panel">
+     <div class="logo">VOLLEY<br><span>RALLY</span></div>
+     <div class="sub">FAST ARCADE VOLLEYBALL</div>
+     <button id="play" class="primary">PLAY MATCH</button>
+     <div class="options"><button class="secondary" id="easy">EASY AI ✓</button><button class="secondary" id="hard">PRO AI</button></div>
+     <div class="help"><b>HOW TO PLAY</b><br>Move with ◀ ▶ · Tap JUMP near the ball · Tap HIT to spike or serve.<br>First to 15 points wins. Turn your phone sideways for the best view.</div>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<script>
+(() => {
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=960,H=540, floor=450, netX=480, netTop=275;
+const menu=document.getElementById('menu'),controls=document.getElementById('controls'),message=document.getElementById('message');
+let state='menu',paused=false,score=[0,0],aiLevel=0,keys={},last=0,serveSide=0,pointTimer=0,flash=0;
+let particles=[];
+const player={x:210,y:floor,r:25,vx:0,vy:0,ground:true,face:1,hitCooldown:0, color:'#2f6feb',name:'YOU'};
+const ai={x:750,y:floor,r:25,vx:0,vy:0,ground:true,face:-1,hitCooldown:0,color:'#f28b31',name:'RIVAL'};
+const ball={x:210,y:floor-65,r:15,vx:0,vy:0,spin:0};
+function resetBall(side=0){serveSide=side;ball.x=side===0?player.x+35:ai.x-35;ball.y=floor-75;ball.vx=side===0?0:0;ball.vy=0;player.x=210;ai.x=750;player.vx=ai.vx=0;player.vy=ai.vy=0;player.ground=ai.ground=true;}
+function updateScore(){document.getElementById('leftScore').innerHTML=score[0]+'<span class="name">YOU</span>';document.getElementById('rightScore').innerHTML=score[1]+'<span class="name">RIVAL</span>';}
+function start(){score=[0,0];updateScore();state='playing';paused=false;menu.style.display='none';controls.style.display='flex';message.innerHTML='<small>FIRST TO 15</small>';resetBall(0);setTimeout(()=>{if(state==='playing')message.innerHTML='';},1100);}
+document.getElementById('play').onclick=start;
+document.getElementById('easy').onclick=()=>{aiLevel=0;document.getElementById('easy').textContent='EASY AI ✓';document.getElementById('hard').textContent='PRO AI';};
+document.getElementById('hard').onclick=()=>{aiLevel=1;document.getElementById('easy').textContent='EASY AI';document.getElementById('hard').textContent='PRO AI ✓';};
+document.getElementById('pause').onclick=()=>{if(state==='playing'){paused=!paused;message.innerHTML=paused?'PAUSED':'';document.getElementById('pause').textContent=paused?'▶':'Ⅱ';}};
+document.querySelectorAll('[data-key]').forEach(b=>{
+ const k=b.dataset.key;
+ const down=e=>{e.preventDefault();keys[k]=true;};
+ const up=e=>{e.preventDefault();keys[k]=false;};
+ b.addEventListener('pointerdown',down);b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('pointerleave',up);
+});
+window.addEventListener('keydown',e=>{if(['ArrowLeft','a','ArrowRight','d',' ','w','ArrowUp','x','Enter'].includes(e.key))e.preventDefault();if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;if(e.key==='ArrowRight'||e.key==='d')keys.right=true;if(e.key===' '||e.key==='w'||e.key==='ArrowUp')keys.jump=true;if(e.key==='x'||e.key==='Enter')keys.hit=true;});
+window.addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;if(e.key==='ArrowRight'||e.key==='d')keys.right=false;if(e.key===' '||e.key==='w'||e.key==='ArrowUp')keys.jump=false;if(e.key==='x'||e.key==='Enter')keys.hit=false;});
+function jump(p){if(p.ground){p.vy=-405;p.ground=false;}}
+function hit(p,side){
+ if(p.hitCooldown>0)return;
+ let dx=ball.x-p.x,dy=ball.y-(p.y-35);
+ if(Math.abs(dx)<95 && Math.abs(dy)<105){
+   const toward=side===0?1:-1;
+   ball.vx=toward*(250+Math.random()*80)+(p.vx*.45);
+   ball.vy=-300-Math.random()*100-(p.ground?0:75);
+   if(Math.abs(dx)<42)ball.vx=toward*370;
+   p.hitCooldown=.35;ball.spin+=.7;
+   for(let i=0;i<8;i++)particles.push({x:ball.x,y:ball.y,vx:(Math.random()-.5)*180,vy:(Math.random()-.5)*180,life:.35});
+ }
+}
+function award(side){if(state!=='playing')return;score[side]++;updateScore();state='point';pointTimer=1.2;message.innerHTML=side===0?'POINT!':'RIVAL SCORES';if(score[side]>=15&&Math.abs(score[0]-score[1])>=2){state='over';message.innerHTML=side===0?'YOU WIN!':'RIVAL WINS';setTimeout(()=>{menu.style.display='flex';controls.style.display='none';document.querySelector('.sub').textContent=score[0]>score[1]?'CHAMPION! READY FOR ANOTHER MATCH?':'GOOD MATCH — TRY AGAIN?';document.getElementById('play').textContent='PLAY AGAIN';},1800);return;}setTimeout(()=>{if(state==='point'){state='playing';message.innerHTML='';resetBall(side===0?1:0);}},1000);}
+function update(dt){
+ if(state!=='playing'||paused)return;
+ const speed=270;
+ player.vx=0;if(keys.left)player.vx=-speed;if(keys.right)player.vx=speed;
+ if(keys.jump){jump(player);keys.jump=false;}
+ if(keys.hit){hit(player,0);keys.hit=false;}
+ player.x+=player.vx*dt;player.x=Math.max(35,Math.min(netX-35,player.x));player.face=ball.x>player.x?1:-1;
+ for(const p of [player,ai]){p.y+=p.vy*dt;p.vy+=1000*dt;if(p.y>=floor){p.y=floor;p.vy=0;p.ground=true;}p.hitCooldown=Math.max(0,p.hitCooldown-dt);}
+ // AI tracks the ball on its side, with a readable reaction delay.
+ let target=ball.x>netX?ball.x:735;
+ const reaction=aiLevel?1:.62;
+ if(ball.x>netX-15){if(ai.x<target-18)ai.vx=150*reaction;else if(ai.x>target+18)ai.vx=-150*reaction;else ai.vx=0;}else{ai.vx=(735-ai.x)*.8;}
+ ai.x+=ai.vx*dt;ai.x=Math.max(netX+35,Math.min(925,ai.x));ai.face=ball.x<ai.x?-1:1;
+ if(ball.x>netX-85&&ball.x<netX+145&&ball.y<floor-35&&ai.ground&&Math.random()<(aiLevel?.11:.045))jump(ai);
+ if(ball.x>netX && Math.abs(ball.x-ai.x)<83&&Math.abs(ball.y-(ai.y-35))<95&&ai.hitCooldown<=0&&Math.random()<(aiLevel?.95:.7)){
+   ball.vx=- (aiLevel?340:270)-Math.random()*70;ball.vy=-310-Math.random()*100-(ai.ground?0:60);ai.hitCooldown=.55;
+ }
+ ball.vy+=850*dt;ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;
+ // Slight air drag.
+ ball.vx*=Math.pow(.999,dt*60);ball.spin+=ball.vx*dt*.004;
+ // Court boundaries and net.
+ if(ball.x<ball.r){ball.x=ball.r;ball.vx=Math.abs(ball.vx)*.7;}
+ if(ball.x>W-ball.r){ball.x=W-ball.r;ball.vx=-Math.abs(ball.vx)*.7;}
+ if(ball.x>netX-ball.r-2&&ball.x<netX+ball.r+2&&ball.y>netTop-ball.r){
+   if(ball.y<netTop+10){ball.y=netTop-ball.r;ball.vy=-Math.abs(ball.vy)*.45;}
+   else {if(ball.x<netX)ball.x=netX-ball.r-2;else ball.x=netX+ball.r+2;ball.vx*=-.45;}
+ }
+ if(ball.y+ball.r>=floor){
+   ball.y=floor-ball.r;
+   // Ground on your own half gives opponent point.
+   award(ball.x<netX?1:0);
+ }
+ particles=particles.filter(p=>p.life>0);particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;});
+}
+function rounded(x,y,w,h,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
+function drawCourt(){
+ const sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#8edcff');sky.addColorStop(1,'#d7f4ff');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+ // distant hills
+ ctx.fillStyle='#9acba7';ctx.beginPath();ctx.moveTo(0,330);ctx.quadraticCurveTo(130,260,260,330);ctx.quadraticCurveTo(400,260,540,326);ctx.quadraticCurveTo(740,245,960,325);ctx.lineTo(960,450);ctx.lineTo(0,450);ctx.fill();
+ // crowd / banners
+ for(let i=0;i<40;i++){ctx.fillStyle=['#f5a65b','#5e9be6','#fff','#e77d83','#4cae9a'][i%5];ctx.beginPath();ctx.arc(i*25+5,350+(i%3)*8,5,0,Math.PI*2);ctx.fill();}
+ const sand=ctx.createLinearGradient(0,370,0,520);sand.addColorStop(0,'#ffd78a');sand.addColorStop(1,'#f3ae57');ctx.fillStyle=sand;ctx.fillRect(0,365,W,175);
+ // court
+ ctx.fillStyle='#e9a14f';ctx.fillRect(35,385,890,65);
+ ctx.strokeStyle='#fff8e7';ctx.lineWidth=4;ctx.strokeRect(35,385,890,65);ctx.beginPath();ctx.moveTo(netX,385);ctx.lineTo(netX,450);ctx.stroke();
+ // net posts + net
+ ctx.fillStyle='#31465e';ctx.fillRect(netX-4,netTop-8,8,floor-netTop+8);
+ ctx.fillStyle='#f7fbff';ctx.fillRect(netX-3,netTop,6,floor-netTop);
+ ctx.strokeStyle='#7d9db7';ctx.lineWidth=1;
+ for(let y=netTop;y<floor;y+=12){ctx.beginPath();ctx.moveTo(netX-20,y);ctx.lineTo(netX+20,y);ctx.stroke();}
+ ctx.fillStyle='#fff';ctx.fillRect(netX-23,netTop-4,46,6);
+ // shadows
+ for(const p of [player,ai]){ctx.fillStyle='#7b562c44';ctx.beginPath();ctx.ellipse(p.x,floor+2,29,7,0,0,Math.PI*2);ctx.fill();}
+}
+function drawPlayer(p,isAI){
+ const x=p.x,y=p.y,skin=isAI?'#b8754d':'#e2a078',jersey=p.color;
+ // legs
+ ctx.lineCap='round';ctx.lineWidth=10;ctx.strokeStyle='#243752';
+ ctx.beginPath();ctx.moveTo(x-8,y-19);ctx.lineTo(x-12,y-3);ctx.moveTo(x+8,y-19);ctx.lineTo(x+13,y-3);ctx.stroke();
+ // shoes
+ rounded(x-20,y-6,15,7,3,'#f8f8f5');rounded(x+6,y-6,16,7,3,'#f8f8f5');
+ // torso
+ ctx.fillStyle=jersey;ctx.beginPath();ctx.roundRect(x-18,y-56,36,39,9);ctx.fill();
+ ctx.fillStyle='#ffffffcc';ctx.fillRect(x-2,y-50,4,24);
+ // arms, lifted if ball nearby
+ let reach=Math.abs(ball.x-x)<85&&Math.abs(ball.y-(y-55))<100;
+ ctx.strokeStyle=skin;ctx.lineWidth=9;
+ ctx.beginPath();
+ ctx.moveTo(x-15,y-48);ctx.lineTo(x-24,y-(reach?74:31));
+ ctx.moveTo(x+15,y-48);ctx.lineTo(x+24,y-(reach?70:30));ctx.stroke();
+ // head
+ ctx.fillStyle=skin;ctx.beginPath();ctx.arc(x,y-69,15,0,Math.PI*2);ctx.fill();
+ // hair/headband
+ ctx.fillStyle=isAI?'#3a2930':'#172d50';ctx.beginPath();ctx.arc(x,y-73,15,Math.PI,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#fff';ctx.fillRect(x-10,y-72,20,4);
+ // face
+ ctx.fillStyle='#1a2638';ctx.beginPath();ctx.arc(x+(isAI?-5:5),y-68,2,0,Math.PI*2);ctx.fill();
+}
+function drawBall(){
+ ctx.save();ctx.translate(ball.x,ball.y);ctx.rotate(ball.spin);
+ ctx.shadowColor='#26364a55';ctx.shadowBlur=8;ctx.shadowOffsetY=3;
+ ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,0,ball.r,0,Math.PI*2);ctx.fill();ctx.shadowColor='transparent';
+ ctx.strokeStyle='#e5a52d';ctx.lineWidth=5;
+ ctx.beginPath();ctx.arc(0,0,ball.r-2,-1.1,1.15);ctx.stroke();
+ ctx.strokeStyle='#4b91db';ctx.beginPath();ctx.arc(0,0,ball.r-3,1.7,4.1);ctx.stroke();
+ ctx.strokeStyle='#ef6b45';ctx.beginPath();ctx.moveTo(-12,-6);ctx.quadraticCurveTo(0,2,12,8);ctx.stroke();
+ ctx.restore();
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);drawCourt();drawPlayer(player,false);drawPlayer(ai,true);drawBall();
+ particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/.35);ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();});ctx.globalAlpha=1;
+ // labels on court
+ ctx.fillStyle='#ffffffb8';ctx.font='900 12px system-ui';ctx.textAlign='center';ctx.fillText('YOU',player.x,floor+25);ctx.fillText('RIVAL',ai.x,floor+25);
+}
+function loop(t){const dt=Math.min((t-last)/1000||0,.033);last=t;update(dt);draw();requestAnimationFrame(loop);}
+resetBall();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
